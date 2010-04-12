@@ -108,7 +108,6 @@ static int _unload_module(int reload)
 
 static int mongodb_log(struct ast_cdr *cdr)
 {
-	int res;
 	const char * ns;
 	mongo_connection conn[1];
 	mongo_connection_options opts;
@@ -129,96 +128,94 @@ static int mongodb_log(struct ast_cdr *cdr)
 
 	if (mongo_connect( conn , &opts )){
 		ast_log(LOG_ERROR, "Method: mongodb_log, MongoDB failed to connect.\n");
+		connected = 0;
+		records = 0;
+		return -1;
 	}
 
 	ast_debug(1, "mongodb: Locking mongodb_lock.\n");
 	ast_mutex_lock(&mongodb_lock);
-	if (conn) {
-		ast_debug(1, "mongodb: Got connection, Preparing record.\n");
-		bson_buffer bb;
-		bson b;
-		mongo_cursor * cursor;
-		char workspace[2048], *value = NULL;
 
-		ast_debug(1, "mongodb: Init bb buffer.\n");
-		bson_buffer_init( & bb );
-		bson_append_new_oid( &bb, "_id" );
+	ast_debug(1, "mongodb: Got connection, Preparing record.\n");
 
-		ast_debug(1, "mongodb: accountcode.\n");
-		bson_append_string( &bb , "accountcode",  cdr->accountcode);
+	bson_buffer bb;
+	bson b;
+	mongo_cursor * cursor;
+	char workspace[2048], *value = NULL;
 
-		ast_debug(1, "mongodb: src.\n");
-		bson_append_string( &bb , "src",  cdr->src);
+	ast_debug(1, "mongodb: Init bb buffer.\n");
+	bson_buffer_init( & bb );
+	bson_append_new_oid( &bb, "_id" );
 
-		ast_debug(1, "mongodb: dst.\n");
-		bson_append_string( &bb, "dst" , cdr->dst );
+	ast_debug(1, "mongodb: accountcode.\n");
+	bson_append_string( &bb , "accountcode",  cdr->accountcode);
 
-		ast_debug(1, "mongodb: dcontext.\n");
-		bson_append_string( &bb, "dcontext" , cdr->dcontext );
+	ast_debug(1, "mongodb: src.\n");
+	bson_append_string( &bb , "src",  cdr->src);
 
-		ast_debug(1, "mongodb: clid.\n");
-		bson_append_string( &bb, "clid" , cdr->clid );
+	ast_debug(1, "mongodb: dst.\n");
+	bson_append_string( &bb, "dst" , cdr->dst );
 
-		ast_debug(1, "mongodb: channel.\n");
-		bson_append_string( &bb, "channel" , cdr->channel );
+	ast_debug(1, "mongodb: dcontext.\n");
+	bson_append_string( &bb, "dcontext" , cdr->dcontext );
 
-		ast_debug(1, "mongodb: dstchannel.\n");
-		bson_append_string( &bb, "dstchannel" , cdr->dstchannel );
+	ast_debug(1, "mongodb: clid.\n");
+	bson_append_string( &bb, "clid" , cdr->clid );
 
-		ast_debug(1, "mongodb: lastapp.\n");
-		bson_append_string( &bb, "lastapp" , cdr->lastapp );
+	ast_debug(1, "mongodb: channel.\n");
+	bson_append_string( &bb, "channel" , cdr->channel );
 
-		ast_debug(1, "mongodb: lastdata.\n");
-		bson_append_string( &bb, "lastdata" , cdr->lastdata );
+	ast_debug(1, "mongodb: dstchannel.\n");
+	bson_append_string( &bb, "dstchannel" , cdr->dstchannel );
 
-		ast_debug(1, "mongodb: start.\n");
-		int_bson_append_date( &bb, "start" , cdr->start );
+	ast_debug(1, "mongodb: lastapp.\n");
+	bson_append_string( &bb, "lastapp" , cdr->lastapp );
 
-		ast_debug(1, "mongodb: answer.\n");
-		int_bson_append_date( &bb, "answer" , cdr->answer );
+	ast_debug(1, "mongodb: lastdata.\n");
+	bson_append_string( &bb, "lastdata" , cdr->lastdata );
 
-		ast_debug(1, "mongodb: end.\n");
-		int_bson_append_date( &bb, "end" , cdr->end );
+	ast_debug(1, "mongodb: start.\n");
+	int_bson_append_date( &bb, "start" , cdr->start );
 
-		ast_debug(1, "mongodb: duration.\n");
-		bson_append_int( &bb, "duration" , cdr->duration );
+	ast_debug(1, "mongodb: answer.\n");
+	int_bson_append_date( &bb, "answer" , cdr->answer );
 
-		ast_debug(1, "mongodb: billsec.\n");
-		bson_append_int( &bb, "billsec" , cdr->billsec );
+	ast_debug(1, "mongodb: end.\n");
+	int_bson_append_date( &bb, "end" , cdr->end );
 
-		ast_debug(1, "mongodb: disposition.\n");
-		bson_append_string( &bb, "disposition" , ast_cdr_disp2str(cdr->disposition) );
+	ast_debug(1, "mongodb: duration.\n");
+	bson_append_int( &bb, "duration" , cdr->duration );
 
-		ast_debug(1, "mongodb: amaflags.\n");
-		bson_append_string( &bb, "amaflags" , ast_cdr_flags2str(cdr->amaflags) );
+	ast_debug(1, "mongodb: billsec.\n");
+	bson_append_int( &bb, "billsec" , cdr->billsec );
 
-		if (loguniqueid)
-			ast_debug(1, "mongodb: uniqueid.\n");
-			bson_append_string( &bb, "uniqueid" , cdr->uniqueid );
+	ast_debug(1, "mongodb: disposition.\n");
+	bson_append_string( &bb, "disposition" , ast_cdr_disp2str(cdr->disposition) );
 
-		if (loguserfield)
-			ast_debug(1, "mongodb: userfield.\n");
-			bson_append_string( &bb, "userfield" , cdr->userfield );
+	ast_debug(1, "mongodb: amaflags.\n");
+	bson_append_string( &bb, "amaflags" , ast_cdr_flags2str(cdr->amaflags) );
 
-		ast_debug(1, "mongodb: Inserting a CDR record.\n");
-		bson_from_buffer(&b, &bb);
-		mongo_insert( conn , &ns , &b );
-		bson_destroy(&b);
-		mongo_destroy( conn );
+	if (loguniqueid)
+		ast_debug(1, "mongodb: uniqueid.\n");
+		bson_append_string( &bb, "uniqueid" , cdr->uniqueid );
 
-		connected = 1;
-		records++;
-		totalrecords++;
-		res = 0;
-	} else {
-		connected = 0;
-		records = 0;
-		res = -1;
-	}
+	if (loguserfield)
+		ast_debug(1, "mongodb: userfield.\n");
+		bson_append_string( &bb, "userfield" , cdr->userfield );
+
+	ast_debug(1, "mongodb: Inserting a CDR record.\n");
+	bson_from_buffer(&b, &bb);
+	mongo_insert( conn , &ns , &b );
+	bson_destroy(&b);
+	mongo_destroy( conn );
+
+	connected = 1;
+	records++;
+	totalrecords++;
 
 	ast_debug(1, "Unlocking mongodb_lock.\n");
 	ast_mutex_unlock(&mongodb_lock);
-	return res;
+	return 0;
 }
 
 static int load_config_string(struct ast_config *cfg, const char *category, const char *variable, struct ast_str **field, const char *def)
