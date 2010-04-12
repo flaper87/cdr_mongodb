@@ -15,7 +15,7 @@ BASICOPTS = -w -g -pthread -pipe -g3 -O6 -fPIC -DMONGO_HAVE_STDINT -DAST_MODULE=
 CFLAGS = $(BASICOPTS)
 
 # Define the target directories.
-TARGETDIR_cdr_mongodb.so=GNU-amd64-Linux
+TARGETDIR_cdr_mongodb.so=build
 
 
 all: $(TARGETDIR_cdr_mongodb.so)/cdr_mongodb.so

@@ -1,4 +1,31 @@
 MongoDB CDR backend for Asterisk
 Author: Flavio Percoco Premoli <flaper87@flaper87.org>
 
-Docs and Instruccions will be added very soon... ;)
+BUILDING
+
+1-) Download, build and install mongo-c-driver: http://github.com/mongodb/mongo-c-driver
+2-) Open the Makefile and add mongo-c-driver headers path to CFLAGS_cdr_mongodb.so (If mongo-c-driver files are not in a standard path)
+3-) make
+
+INSTALLING
+
+1-) cp build/cdr_mongodb.so ASTERISK_INSTALL_PATH/lib/asterisk/modules/
+
+USAGE
+
+1-) Create a config file. See samples/cdr_mongodb.conf
+2-) Add: load => cdr_mongodb.so to the modules.conf file
+
+LICENSING
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License v2 as published
+by the Free Software Foundation.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
