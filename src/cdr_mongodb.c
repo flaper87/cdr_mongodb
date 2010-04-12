@@ -59,23 +59,17 @@ static char *desc = "MongoDB CDR Backend";
 static char *name = "mongodb";
 static char *config = "cdr_mongodb.conf";
 
-static struct ast_str *hostname = NULL, *dbname = NULL, *dbuser = NULL, *password = NULL, *dbsock = NULL, *dbcollection = NULL, *dbcharset = NULL;
-
-static struct ast_str *ssl_ca = NULL, *ssl_cert = NULL, *ssl_key = NULL;
+static struct ast_str *hostname = NULL, *dbname = NULL, *dbuser = NULL, *password = NULL, *dbcollection = NULL;
 
 static int dbport = 0;
 static int connected = 0;
-static time_t connect_time = 0;
 static int records = 0;
 static int totalrecords = 0;
-static int timeout = 0;
-static int calldate_compat = 0;
 
 static int loguniqueid = 0;
 static int loguserfield = 0;
 
 AST_MUTEX_DEFINE_STATIC(mongodb_lock);
-//AST_MUTEX_DEFINE_STATIC(acf_lock);
 
 struct unload_string {
 	AST_LIST_ENTRY(unload_string) entry;
@@ -84,7 +78,7 @@ struct unload_string {
 
 static AST_LIST_HEAD_STATIC(unload_strings, unload_string);
 
-static int int_bson_append_date(bson_buffer * bb, const char *name, struct timeval when)
+static int internal_bson_append_date(bson_buffer * bb, const char *name, struct timeval when)
 {
 	char tmp[128] = "";
 	struct ast_tm tm;
@@ -174,13 +168,13 @@ static int mongodb_log(struct ast_cdr *cdr)
 	bson_append_string( &bb, "lastdata" , cdr->lastdata );
 
 	ast_debug(1, "mongodb: start.\n");
-	int_bson_append_date( &bb, "start" , cdr->start );
+	internal_bson_append_date( &bb, "start" , cdr->start );
 
 	ast_debug(1, "mongodb: answer.\n");
-	int_bson_append_date( &bb, "answer" , cdr->answer );
+	internal_bson_append_date( &bb, "answer" , cdr->answer );
 
 	ast_debug(1, "mongodb: end.\n");
-	int_bson_append_date( &bb, "end" , cdr->end );
+	internal_bson_append_date( &bb, "end" , cdr->end );
 
 	ast_debug(1, "mongodb: duration.\n");
 	bson_append_int( &bb, "duration" , cdr->duration );
@@ -365,12 +359,7 @@ static int _load_module(int reload)
 	}
 
 	ast_config_destroy(cfg);
-/*
-	if (res < 0) {
-		ast_log(LOG_ERROR, "Module Load failed: mongodb.\n");
-		return AST_MODULE_LOAD_FAILURE;
-	}
-*/
+
 	res = ast_cdr_register(name, desc, mongodb_log);
 	if (res) {
 		ast_log(LOG_ERROR, "Unable to register MongoDB CDR handling\n");
