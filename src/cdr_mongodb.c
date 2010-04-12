@@ -108,6 +108,7 @@ static int _unload_module(int reload)
 
 static int mongodb_log(struct ast_cdr *cdr)
 {
+	int res;
 	const char * ns;
 	mongo_connection conn[1];
 	mongo_connection_options opts;
@@ -127,7 +128,7 @@ static int mongodb_log(struct ast_cdr *cdr)
 	ast_debug(1, "mongodb: ns == %s.\n", &ns);
 
 	if (mongo_connect( conn , &opts )){
-		ast_log(LOG_ERROR, "Method: mongodb_log, MongoDB failed to connect\n");
+		ast_log(LOG_ERROR, "Method: mongodb_log, MongoDB failed to connect.\n");
 	}
 
 	ast_debug(1, "mongodb: Locking mongodb_lock.\n");
@@ -208,14 +209,16 @@ static int mongodb_log(struct ast_cdr *cdr)
 		connected = 1;
 		records++;
 		totalrecords++;
+		res = 0;
 	} else {
 		connected = 0;
 		records = 0;
+		res = -1;
 	}
 
 	ast_debug(1, "Unlocking mongodb_lock.\n");
 	ast_mutex_unlock(&mongodb_lock);
-	return 0;
+	return res;
 }
 
 static int load_config_string(struct ast_config *cfg, const char *category, const char *variable, struct ast_str **field, const char *def)
