@@ -141,7 +141,6 @@ static int mongodb_log(struct ast_cdr *cdr)
 	bson_buffer bb;
 	bson b;
 	mongo_cursor * cursor;
-	char workspace[2048], *value = NULL;
 
 	ast_debug(1, "mongodb: Init bb buffer.\n");
 	bson_buffer_init( & bb );
