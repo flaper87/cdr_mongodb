@@ -4,7 +4,7 @@ Author: Flavio Percoco Premoli <flaper87@flaper87.org>
 BUILDING
 
 1-) Download, build and install mongo-c-driver: http://github.com/mongodb/mongo-c-driver
-2-) Open the Makefile and add mongo-c-driver headers path to CFLAGS_cdr_mongodb.so (If mongo-c-driver files are not in a standard path)
+2-) If mongo-c-driver files are not in a standard path, open the Makefile and add mongo-c-driver headers path to CFLAGS_cdr_mongodb.so
 3-) make
 
 INSTALLING
