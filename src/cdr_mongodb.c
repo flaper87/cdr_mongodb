@@ -54,7 +54,6 @@
 #include <sys/types.h>
 #include <errno.h>
 
-
 static char *desc = "MongoDB CDR Backend";
 static char *name = "mongodb";
 static char *config = "cdr_mongodb.conf";
@@ -97,6 +96,7 @@ static int internal_bson_append_date(bson_buffer * bb, const char *name, struct 
 
 static int _unload_module(int reload)
 {
+	ast_cdr_unregister(name);
 	return 0;
 }
 
@@ -108,7 +108,7 @@ static int mongodb_log(struct ast_cdr *cdr)
 
 
 	ast_debug(1, "mongodb: Starting mongodb_log.\n");
-	strncpy(opts.host, ast_str_buffer(hostname), 255);
+	ast_copy_string(opts.host, ast_str_buffer(hostname), 255);
 	opts.host[254] = '\0';
 	opts.port = dbport;
 
@@ -188,13 +188,11 @@ static int mongodb_log(struct ast_cdr *cdr)
 	ast_debug(1, "mongodb: amaflags.\n");
 	bson_append_string( &bb, "amaflags" , ast_cdr_flags2str(cdr->amaflags) );
 
-	if (loguniqueid)
-		ast_debug(1, "mongodb: uniqueid.\n");
-		bson_append_string( &bb, "uniqueid" , cdr->uniqueid );
+	ast_debug(1, "mongodb: uniqueid.\n");
+	bson_append_string( &bb, "uniqueid" , cdr->uniqueid );
 
-	if (loguserfield)
-		ast_debug(1, "mongodb: userfield.\n");
-		bson_append_string( &bb, "userfield" , cdr->userfield );
+	ast_debug(1, "mongodb: userfield.\n");
+	bson_append_string( &bb, "userfield" , cdr->userfield );
 
 	ast_debug(1, "mongodb: Inserting a CDR record.\n");
 	bson_from_buffer(&b, &bb);
@@ -216,8 +214,9 @@ static int load_config_string(struct ast_config *cfg, const char *category, cons
 	struct unload_string *us;
 	const char *tmp;
 
-	if (!(us = ast_calloc(1, sizeof(*us))))
+	if (!(us = ast_calloc(1, sizeof(*us)))) {
 		return -1;
+	}
 
 	if (!(*field = ast_str_create(16))) {
 		ast_free(us);
@@ -250,25 +249,31 @@ static char *handle_cli_cdr_mongodb_status(struct ast_cli_entry *e, int cmd, str
 		return NULL;
 	}
 
-	if (a->argc != 3)
+	if (a->argc != 3) {
 		return CLI_SHOWUSAGE;
+	}
 
 	if (connected) {
 		char status[256], status2[100] = "";
-		if (dbport)
-			snprintf(status, 255, "Connected to %s@%s, port %d", ast_str_buffer(dbname), ast_str_buffer(hostname), dbport);
-		else
-			snprintf(status, 255, "Connected to %s@%s", ast_str_buffer(dbname), ast_str_buffer(hostname));
+		if (dbport) {
+			snprintf(status, sizeof(status), "Connected to %s@%s, port %d", ast_str_buffer(dbname), ast_str_buffer(hostname), dbport);
+		} else {
+			snprintf(status, sizeof(status), "Connected to %s@%s", ast_str_buffer(dbname), ast_str_buffer(hostname));
+		}
 
-		if (!ast_strlen_zero(ast_str_buffer(dbuser)))
-			snprintf(status2, 99, " with username %s", ast_str_buffer(dbuser));
-		if (ast_str_strlen(dbcollection))
-			snprintf(status2, 99, " using collection %s", ast_str_buffer(dbcollection));
+		if (!ast_strlen_zero(ast_str_buffer(dbuser))) {
+			snprintf(status2, sizeof(status2), " with username %s", ast_str_buffer(dbuser));
+		}
 
-		if (records == totalrecords)
+		if (ast_str_strlen(dbcollection)) {
+			snprintf(status2, sizeof(status2), " using collection %s", ast_str_buffer(dbcollection));
+		}
+
+		if (records == totalrecords) {
 			ast_cli(a->fd, "  Wrote %d records since last restart.\n", totalrecords);
-		else
+		} else {
 			ast_cli(a->fd, "  Wrote %d records since last restart and %d records since last reconnect.\n", totalrecords, records);
+		}
 	} else {
 		ast_cli(a->fd, "Not currently connected to a MongoDB server.\n");
 	}
@@ -286,16 +291,15 @@ static int load_config_number(struct ast_config *cfg, const char *category, cons
 
 	tmp = ast_variable_retrieve(cfg, category, variable);
 
-	if (!tmp || sscanf(tmp, "%d", field) < 1)
+	if (!tmp || sscanf(tmp, "%d", field) < 1) {
 		*field = def;
+	}
 
 	return 0;
 }
 
 static int _load_module(int reload)
 {
-	ast_debug(1, "Starting mongodb module load.\n");
-
 	int res;
 	struct ast_config *cfg;
 	struct ast_variable *var;
@@ -307,12 +311,15 @@ static int _load_module(int reload)
 	bson b;
 	mongo_cursor * cursor;
 
+	ast_debug(1, "Starting mongodb module load.\n");
 	ast_debug(1, "Loading mongodb Config.\n");
+
 	if (!(cfg = ast_config_load(config, config_flags)) || cfg == CONFIG_STATUS_FILEINVALID) {
 		ast_log(LOG_WARNING, "Unable to load config for mongodb CDR's: %s\n", config);
 		return AST_MODULE_LOAD_SUCCESS;
-	} else if (cfg == CONFIG_STATUS_FILEUNCHANGED)
+	} else if (cfg == CONFIG_STATUS_FILEUNCHANGED) {
 		return AST_MODULE_LOAD_SUCCESS;
+	}
 
 
 	if (reload) {
@@ -346,7 +353,7 @@ static int _load_module(int reload)
 	ast_debug(1, "Got password of %s\n", ast_str_buffer(password));
 
 
-	strncpy(opts.host, ast_str_buffer(hostname), 255);
+	ast_copy_string(opts.host, ast_str_buffer(hostname), 255);
 	opts.host[254] = '\0';
 	opts.port = dbport;
 
