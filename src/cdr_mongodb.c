@@ -59,7 +59,7 @@ static char *desc = "MongoDB CDR Backend";
 static char *name = "mongodb";
 static char *config = "cdr_mongodb.conf";
 
-static struct ast_str *hostname = NULL, *dbname = NULL, *dbcollection = NULL, *dbnamespace = NULL;
+static struct ast_str *hostname = NULL, *dbname = NULL, *dbcollection = NULL, *dbnamespace = NULL, *dbuser = NULL, *password = NULL;
 
 static int dbport = 0;
 static int connected = 0;
@@ -95,6 +95,14 @@ static int mongodb_log(struct ast_cdr *cdr)
 	if (mongo_connect( &conn , ast_str_buffer(hostname), dbport ) != MONGO_OK){
 		mongo_destroy( &conn );
 		ast_log(LOG_ERROR, "Method: mongodb_log, MongoDB failed to connect.\n");
+		connected = 0;
+		records = 0;
+		return -1;
+	}
+
+	if (ast_str_strlen(dbuser) != 0 && (mongo_cmd_authenticate(&conn, ast_str_buffer(dbname), ast_str_buffer(dbuser), ast_str_buffer(password)) != MONGO_OK)) {
+		mongo_destroy( &conn );
+		ast_log(LOG_ERROR, "Method: mongodb_log, MongoDB failed to authenticate to do %s with username %s!\n", ast_str_buffer(dbname), ast_str_buffer(dbuser));
 		connected = 0;
 		records = 0;
 		return -1;
@@ -303,6 +311,8 @@ static int _load_module(int reload)
 	res |= load_config_string(cfg, "global", "dbname", &dbname, "astriskcdrdb");
 	res |= load_config_string(cfg, "global", "collection", &dbcollection, "cdr");
 	res |= load_config_number(cfg, "global", "port", &dbport, 27017);
+	res |= load_config_string(cfg, "global", "username", &dbuser, "");
+	res |= load_config_string(cfg, "global", "password", &password, "");
 
 	if (res < 0) {
 		return AST_MODULE_LOAD_FAILURE;
@@ -312,7 +322,10 @@ static int _load_module(int reload)
 	ast_debug(1, "Got port of %d\n", dbport);
 	ast_debug(1, "Got dbname of %s\n", ast_str_buffer(dbname));
 	ast_debug(1, "Got dbcollection of %s\n", ast_str_buffer(dbcollection));
-
+	ast_debug(1, "Got user of %s\n", ast_str_buffer(dbuser));
+	ast_debug(1, "Got password of %s\n", ast_str_buffer(password));
+	
+	
 	dbnamespace = ast_str_create(255);
 	ast_str_set(&dbnamespace, 0, "%s.%s", ast_str_buffer(dbname), ast_str_buffer(dbcollection));
 
@@ -320,7 +333,13 @@ static int _load_module(int reload)
 		ast_log(LOG_ERROR, "Method: _load_module, MongoDB failed to connect to %s:%d!\n", ast_str_buffer(hostname), dbport);
 		res = -1;
 	} else {
-		connected = 1;
+		if (ast_str_strlen(dbuser) != 0 && (mongo_cmd_authenticate(&conn, ast_str_buffer(dbname), ast_str_buffer(dbuser), ast_str_buffer(password)) != MONGO_OK)) {
+			ast_log(LOG_ERROR, "Method: _load_module, MongoDB failed to authenticate to do %s with username %s!\n", ast_str_buffer(dbname), ast_str_buffer(dbuser));
+			res = -1;
+		} else {
+			connected = 1;
+		}
+		
 		mongo_destroy(&conn);
 	}
 
