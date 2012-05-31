@@ -49,6 +49,7 @@
 #include <time.h>
 
 #include <mongo.h>
+#include <bson.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -58,7 +59,7 @@ static char *desc = "MongoDB CDR Backend";
 static char *name = "mongodb";
 static char *config = "cdr_mongodb.conf";
 
-static struct ast_str *hostname = NULL, *dbname = NULL, *dbuser = NULL, *password = NULL, *dbcollection = NULL;
+static struct ast_str *hostname = NULL, *dbname = NULL, *dbcollection = NULL, *dbnamespace = NULL, *dbuser = NULL, *password = NULL;
 
 static int dbport = 0;
 static int connected = 0;
@@ -77,23 +78,6 @@ struct unload_string {
 
 static AST_LIST_HEAD_STATIC(unload_strings, unload_string);
 
-static int internal_bson_append_date(bson_buffer * bb, const char *name, struct timeval when)
-{
-	char tmp[128] = "";
-	struct ast_tm tm;
-
-	if (ast_tvzero(when)) {
-		bson_append_string(bb, name, "");
-		return 0;
-	}
-
-	ast_localtime(&when, &tm, NULL);
-	ast_strftime(tmp, sizeof(tmp), "%Y-%m-%d %T", &tm);
-
-	bson_append_string(bb, name, tmp);
-	return 0;
-}
-
 static int _unload_module(int reload)
 {
 	ast_cdr_unregister(name);
@@ -103,25 +87,22 @@ static int _unload_module(int reload)
 static int mongodb_log(struct ast_cdr *cdr)
 {
 	const char * ns;
-	mongo_connection conn[1];
-	mongo_connection_options opts;
-
+	mongo conn[1];
 
 	ast_debug(1, "mongodb: Starting mongodb_log.\n");
-	ast_copy_string(opts.host, ast_str_buffer(hostname), 255);
-	opts.host[254] = '\0';
-	opts.port = dbport;
 
-
-	ast_debug(1, "mongodb: Building mongodb ns.\n");
-	strcpy(&ns, ast_str_buffer(dbname));
-	ast_debug(1, "mongodb: ns == %s.\n", &ns);
-	strcat(&ns, ".");
-	strcat(&ns, ast_str_buffer(dbcollection));
-	ast_debug(1, "mongodb: ns == %s.\n", &ns);
-
-	if (mongo_connect( conn , &opts )){
+	mongo_init( &conn );
+	if (mongo_connect( &conn , ast_str_buffer(hostname), dbport ) != MONGO_OK){
+		mongo_destroy( &conn );
 		ast_log(LOG_ERROR, "Method: mongodb_log, MongoDB failed to connect.\n");
+		connected = 0;
+		records = 0;
+		return -1;
+	}
+
+	if (ast_str_strlen(dbuser) != 0 && (mongo_cmd_authenticate(&conn, ast_str_buffer(dbname), ast_str_buffer(dbuser), ast_str_buffer(password)) != MONGO_OK)) {
+		mongo_destroy( &conn );
+		ast_log(LOG_ERROR, "Method: mongodb_log, MongoDB failed to authenticate to do %s with username %s!\n", ast_str_buffer(dbname), ast_str_buffer(dbuser));
 		connected = 0;
 		records = 0;
 		return -1;
@@ -132,73 +113,72 @@ static int mongodb_log(struct ast_cdr *cdr)
 
 	ast_debug(1, "mongodb: Got connection, Preparing record.\n");
 
-	bson_buffer bb;
-	bson b;
-	mongo_cursor * cursor;
+	bson b[1];
 
-	ast_debug(1, "mongodb: Init bb buffer.\n");
-	bson_buffer_init( & bb );
-	bson_append_new_oid( &bb, "_id" );
-
+	ast_debug(1, "mongodb: Init bson.\n");
+	bson_init( &b );
+	bson_append_new_oid( &b, "_id" );
+	
 	ast_debug(1, "mongodb: accountcode.\n");
-	bson_append_string( &bb , "accountcode",  cdr->accountcode);
+	bson_append_string( &b , "accountcode",  cdr->accountcode);
 
 	ast_debug(1, "mongodb: src.\n");
-	bson_append_string( &bb , "src",  cdr->src);
+	bson_append_string( &b , "src",  cdr->src);
 
 	ast_debug(1, "mongodb: dst.\n");
-	bson_append_string( &bb, "dst" , cdr->dst );
+	bson_append_string( &b, "dst" , cdr->dst );
 
 	ast_debug(1, "mongodb: dcontext.\n");
-	bson_append_string( &bb, "dcontext" , cdr->dcontext );
+	bson_append_string( &b, "dcontext" , cdr->dcontext );
 
 	ast_debug(1, "mongodb: clid.\n");
-	bson_append_string( &bb, "clid" , cdr->clid );
+	bson_append_string( &b, "clid" , cdr->clid );
 
 	ast_debug(1, "mongodb: channel.\n");
-	bson_append_string( &bb, "channel" , cdr->channel );
+	bson_append_string( &b, "channel" , cdr->channel );
 
 	ast_debug(1, "mongodb: dstchannel.\n");
-	bson_append_string( &bb, "dstchannel" , cdr->dstchannel );
+	bson_append_string( &b, "dstchannel" , cdr->dstchannel );
 
 	ast_debug(1, "mongodb: lastapp.\n");
-	bson_append_string( &bb, "lastapp" , cdr->lastapp );
+	bson_append_string( &b, "lastapp" , cdr->lastapp );
 
 	ast_debug(1, "mongodb: lastdata.\n");
-	bson_append_string( &bb, "lastdata" , cdr->lastdata );
+	bson_append_string( &b, "lastdata" , cdr->lastdata );
 
 	ast_debug(1, "mongodb: start.\n");
-	internal_bson_append_date( &bb, "start" , cdr->start );
+	bson_append_date( &b, "start", (bson_date_t)cdr->start.tv_sec*1000);
 
 	ast_debug(1, "mongodb: answer.\n");
-	internal_bson_append_date( &bb, "answer" , cdr->answer );
+	bson_append_date( &b, "answer", (bson_date_t)cdr->answer.tv_sec*1000);
 
 	ast_debug(1, "mongodb: end.\n");
-	internal_bson_append_date( &bb, "end" , cdr->end );
+	bson_append_date( &b, "end" , (bson_date_t)cdr->end.tv_sec*1000);
 
 	ast_debug(1, "mongodb: duration.\n");
-	bson_append_int( &bb, "duration" , cdr->duration );
+	bson_append_int( &b, "duration" , cdr->duration );
 
 	ast_debug(1, "mongodb: billsec.\n");
-	bson_append_int( &bb, "billsec" , cdr->billsec );
+	bson_append_int( &b, "billsec" , cdr->billsec );
 
 	ast_debug(1, "mongodb: disposition.\n");
-	bson_append_string( &bb, "disposition" , ast_cdr_disp2str(cdr->disposition) );
+	bson_append_string( &b, "disposition" , ast_cdr_disp2str(cdr->disposition) );
 
 	ast_debug(1, "mongodb: amaflags.\n");
-	bson_append_string( &bb, "amaflags" , ast_cdr_flags2str(cdr->amaflags) );
+	bson_append_string( &b, "amaflags" , ast_cdr_flags2str(cdr->amaflags) );
 
 	ast_debug(1, "mongodb: uniqueid.\n");
-	bson_append_string( &bb, "uniqueid" , cdr->uniqueid );
+	bson_append_string( &b, "uniqueid" , cdr->uniqueid );
 
 	ast_debug(1, "mongodb: userfield.\n");
-	bson_append_string( &bb, "userfield" , cdr->userfield );
+	bson_append_string( &b, "userfield" , cdr->userfield );
+
+	bson_finish(&b);
 
 	ast_debug(1, "mongodb: Inserting a CDR record.\n");
-	bson_from_buffer(&b, &bb);
-	mongo_insert( conn , &ns , &b );
+	mongo_insert( &conn , ast_str_buffer(dbnamespace) , &b );
 	bson_destroy(&b);
-	mongo_destroy( conn );
+	mongo_destroy( &conn );
 
 	connected = 1;
 	records++;
@@ -261,10 +241,6 @@ static char *handle_cli_cdr_mongodb_status(struct ast_cli_entry *e, int cmd, str
 			snprintf(status, sizeof(status), "Connected to %s@%s", ast_str_buffer(dbname), ast_str_buffer(hostname));
 		}
 
-		if (!ast_strlen_zero(ast_str_buffer(dbuser))) {
-			snprintf(status2, sizeof(status2), " with username %s", ast_str_buffer(dbuser));
-		}
-
 		if (ast_str_strlen(dbcollection)) {
 			snprintf(status2, sizeof(status2), " using collection %s", ast_str_buffer(dbcollection));
 		}
@@ -300,16 +276,13 @@ static int load_config_number(struct ast_config *cfg, const char *category, cons
 
 static int _load_module(int reload)
 {
-	int res;
+    int res;
 	struct ast_config *cfg;
 	struct ast_variable *var;
 	struct ast_flags config_flags = { reload ? CONFIG_FLAG_FILEUNCHANGED : 0 };
 
-	mongo_connection conn[1];
-	mongo_connection_options opts;
-	bson_buffer bb;
-	bson b;
-	mongo_cursor * cursor;
+	mongo conn[1];
+	bson b[1];
 
 	ast_debug(1, "Starting mongodb module load.\n");
 	ast_debug(1, "Loading mongodb Config.\n");
@@ -336,10 +309,10 @@ static int _load_module(int reload)
 
 	res |= load_config_string(cfg, "global", "hostname", &hostname, "localhost");
 	res |= load_config_string(cfg, "global", "dbname", &dbname, "astriskcdrdb");
-	res |= load_config_string(cfg, "global", "user", &dbuser, "");
 	res |= load_config_string(cfg, "global", "collection", &dbcollection, "cdr");
-	res |= load_config_string(cfg, "global", "password", &password, "");
 	res |= load_config_number(cfg, "global", "port", &dbport, 27017);
+	res |= load_config_string(cfg, "global", "username", &dbuser, "");
+	res |= load_config_string(cfg, "global", "password", &password, "");
 
 	if (res < 0) {
 		return AST_MODULE_LOAD_FAILURE;
@@ -347,22 +320,27 @@ static int _load_module(int reload)
 
 	ast_debug(1, "Got hostname of %s\n", ast_str_buffer(hostname));
 	ast_debug(1, "Got port of %d\n", dbport);
-	ast_debug(1, "Got user of %s\n", ast_str_buffer(dbuser));
 	ast_debug(1, "Got dbname of %s\n", ast_str_buffer(dbname));
 	ast_debug(1, "Got dbcollection of %s\n", ast_str_buffer(dbcollection));
+	ast_debug(1, "Got user of %s\n", ast_str_buffer(dbuser));
 	ast_debug(1, "Got password of %s\n", ast_str_buffer(password));
+	
+	
+	dbnamespace = ast_str_create(255);
+	ast_str_set(&dbnamespace, 0, "%s.%s", ast_str_buffer(dbname), ast_str_buffer(dbcollection));
 
-
-	ast_copy_string(opts.host, ast_str_buffer(hostname), 255);
-	opts.host[254] = '\0';
-	opts.port = dbport;
-
-	if (mongo_connect( conn , &opts )){
-		ast_log(LOG_ERROR, "Method: _load_module, MongoDB failed to connect\n");
+	if (mongo_connect(&conn , ast_str_buffer(hostname), dbport) != MONGO_OK) {
+		ast_log(LOG_ERROR, "Method: _load_module, MongoDB failed to connect to %s:%d!\n", ast_str_buffer(hostname), dbport);
 		res = -1;
 	} else {
-		connected = 1;
-		mongo_destroy( conn );
+		if (ast_str_strlen(dbuser) != 0 && (mongo_cmd_authenticate(&conn, ast_str_buffer(dbname), ast_str_buffer(dbuser), ast_str_buffer(password)) != MONGO_OK)) {
+			ast_log(LOG_ERROR, "Method: _load_module, MongoDB failed to authenticate to do %s with username %s!\n", ast_str_buffer(dbname), ast_str_buffer(dbuser));
+			res = -1;
+		} else {
+			connected = 1;
+		}
+		
+		mongo_destroy(&conn);
 	}
 
 	ast_config_destroy(cfg);
