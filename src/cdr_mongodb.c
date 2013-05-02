@@ -176,7 +176,7 @@ static int mongodb_log(struct ast_cdr *cdr)
 	bson_finish(&b);
 
 	ast_debug(1, "mongodb: Inserting a CDR record.\n");
-	mongo_insert( &conn , ast_str_buffer(dbnamespace) , &b );
+	mongo_insert( &conn , ast_str_buffer(dbnamespace) , &b, NULL );
 	bson_destroy(&b);
 	mongo_destroy( &conn );
 
